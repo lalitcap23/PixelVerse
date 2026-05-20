@@ -40,7 +40,7 @@ export default function Dashboard({ token, onEnterSpace, onLogout }: DashboardPr
     if (!spaceName.trim()) { addToast('Space name required', 'error'); return; }
     setCreating(true);
     try {
-      const { spaceId } = await createSpace(spaceName.trim(), dimensions, token);
+      await createSpace(spaceName.trim(), dimensions, token);
       addToast('Space created!', 'success');
       setCreateOpen(false);
       setSpaceName('');
