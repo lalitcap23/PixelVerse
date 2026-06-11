@@ -2,7 +2,7 @@
 
 # 🌐 PixelVerse
 
-**A real-time 2D Metaverse platform — like Gather.town, built from scratch.**
+**Real-time 2D multiplayer metaverse — walk, chat, and vibe in virtual spaces.**
 
 Move your avatar around a virtual office, meet teammates, and chat — globally or only with people standing next to you.
 
