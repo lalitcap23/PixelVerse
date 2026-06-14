@@ -22,10 +22,9 @@ const FURNITURE = [
 ];
 
 const ZONES = [
-  { name:'💻 Work Pods',     x:1,  y:1, w:8,  h:9,  border:'rgba(6,182,212,0.35)',   label:'#06b6d4' },
-  { name:'☕ Coffee Corner', x:9,  y:1, w:6,  h:9,  border:'rgba(245,158,11,0.35)', label:'#f59e0b' },
-  { name:'🎮 Game Lounge',   x:13, y:1, w:6,  h:9,  border:'rgba(139,92,246,0.35)', label:'#a78bfa' },
-  { name:'🛋️ Chill Zone',  x:17, y:1, w:8,  h:9,  border:'rgba(16,185,129,0.35)',  label:'#10b981' },
+  { name:'☕ Coffee Corner', x:1,  y:1, w:9,  h:9,  border:'rgba(245,158,11,0.35)', label:'#f59e0b' },
+  { name:'🎮 Game Lounge',   x:10, y:1, w:8,  h:9,  border:'rgba(139,92,246,0.35)', label:'#a78bfa' },
+  { name:'🎵 Music Zone',   x:19, y:1, w:7,  h:9,  border:'rgba(168,85,247,0.35)', label:'#a855f7' },
 ];
 const getZoneAt = (p:{x:number;y:number}) =>
   ZONES.find(z => p.x>=z.x && p.x<z.x+z.w && p.y>=z.y && p.y<z.y+z.h) ?? null;
@@ -36,20 +35,27 @@ const WALLS_SET = (() => {
   const b = (tx:number,ty:number) => s.add(`${tx},${ty}`);
   // Top boundary row
   for(let tx=0;tx<34;tx++) b(tx,0);
-  // Vertical zone walls (left/right sides)
-  for(let ty=0;ty<11;ty++) { b(0,ty); b(9,ty); b(14,ty); b(19,ty); b(26,ty); }
-  // Bottom zone walls with gate openings (1-tile gap at centre of each zone)
-  // Work Pods (x 1-8): gate at x=4
-  for(let tx=0;tx<9;tx++)  if(tx!==4)  b(tx,10);
-  // Coffee (x 9-13):  gate at x=11
-  for(let tx=9;tx<14;tx++) if(tx!==11) b(tx,10);
-  // Game (x 14-18):  gate at x=16
-  for(let tx=14;tx<19;tx++) if(tx!==16) b(tx,10);
-  // Chill (x 19-25): gate at x=22
+  // Vertical walls: Coffee|Game|Music
+  for(let ty=0;ty<11;ty++) { b(0,ty); b(9,ty); b(18,ty); b(26,ty); }
+  // Coffee (x 1-8): gate at x=4
+  for(let tx=1;tx<9;tx++)  if(tx!==4)  b(tx,10);
+  // Game (x 10-17): gate at x=13
+  for(let tx=10;tx<18;tx++) if(tx!==13) b(tx,10);
+  // Music (x 19-25): gate at x=22
   for(let tx=19;tx<26;tx++) if(tx!==22) b(tx,10);
   return s;
 })();
 const isBlocked = (tx:number,ty:number) => WALLS_SET.has(`${tx},${ty}`);
+
+
+// ── Shared music tracks ────────────────────────────────────────────────────
+const MUSIC_TRACKS = [
+  {title:'Lofi Hip Hop Radio',  artist:'Chillhop',        yt:'jfKfPfyJRdk'},
+  {title:'Synthwave Radio',     artist:'Nightwave Plaza',  yt:'4xDzrJKXOOY'},
+  {title:'Jazz Lofi Beats',     artist:'Lofi Jazz',        yt:'DWcJFNfaw9c'},
+  {title:'Chill Lo-Fi Beats',   artist:'Chillhop Music',  yt:'5qap5aO4i9A'},
+  {title:'Ambient Study Music', artist:'Yellowbrickcinema',yt:'lTRiuFIWV54'},
+];
 
 // ── Minecraft-style canvas world ───────────────────────────────────────────
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -104,6 +110,14 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     if(v%9===0){ctx.fillStyle='#e84b6a';ctx.beginPath();ctx.arc(px+T*.7,py+T*.6,2,0,Math.PI*2);ctx.fill();}
     if(v%11===0){ctx.fillStyle='#a78bfa';ctx.beginPath();ctx.arc(px+T*.5,py+T*.25,2,0,Math.PI*2);ctx.fill();}
   };
+  const DF = (px:number,py:number,v:number) => {
+    ctx.fillStyle=(Math.floor(px/T)+Math.floor(py/T))%2===0?'#130a1e':'#0d0618';
+    ctx.fillRect(px,py,T,T);
+    ctx.strokeStyle='rgba(168,85,247,0.14)';ctx.lineWidth=1;ctx.strokeRect(px+.5,py+.5,T-1,T-1);
+    if(v%5===0){ctx.fillStyle='rgba(168,85,247,0.07)';ctx.fillRect(px+2,py+2,T-4,T-4);}
+    if(v%7===0){ctx.fillStyle='rgba(236,72,153,0.05)';ctx.fillRect(px+5,py+5,T-10,T-10);}
+    if(v%11===0){ctx.fillStyle='rgba(59,130,246,0.05)';ctx.fillRect(px+8,py+8,T-16,T-16);}
+  };
 
   // ─ Minecraft top-down tree ────────────────────────────────────
   const tree = (tx:number,ty:number) => {
@@ -121,11 +135,10 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const cols=Math.ceil(w/T)+1, rows=Math.ceil(h/T)+1;
   for(let tx=0;tx<cols;tx++) for(let ty=0;ty<rows;ty++){
     const px=tx*T,py=ty*T,v=hv(tx,ty);
-    if(tx>=1&&tx<9&&ty>=1&&ty<10){WP(px,py,v);continue;}
-    if(tx>=9&&tx<14&&ty>=1&&ty<10){WP(px,py,v);continue;}
-    if(tx>=14&&tx<19&&ty>=1&&ty<10){OB(px,py);continue;}
-    if(tx>=19&&tx<26&&ty>=1&&ty<10){LG(px,py,v);continue;}
-    const wall=(ty===0&&tx<27)||(ty===10&&tx<27)||(tx===0&&ty<11)||(tx===9&&ty<11)||(tx===14&&ty<11)||(tx===19&&ty<11)||(tx===26&&ty<11);
+    if(tx>=1&&tx<9&&ty>=1&&ty<10){WP(px,py,v);continue;}  // Coffee
+    if(tx>=10&&tx<18&&ty>=1&&ty<10){OB(px,py);continue;}   // Game
+    if(tx>=19&&tx<26&&ty>=1&&ty<10){DF(px,py,v);continue;} // Music
+    const wall=(ty===0&&tx<27)||(ty===10&&tx<27)||(tx===0&&ty<11)||(tx===9&&ty<11)||(tx===18&&ty<11)||(tx===26&&ty<11);
     if(wall){S(px,py);continue;}
     if(ty>=10&&ty<=11){D(px,py,v);continue;}
     if(tx>=22&&tx<30&&ty>=15&&ty<21){WA(px,py,v);continue;}
@@ -156,7 +169,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ([['💻 Work Pods','#06b6d4',1,1,8,9],
     ['☕ Café','#f59e0b',9,1,5,9],
     ['🎮 Game Lounge','#a78bfa',14,1,5,9],
-    ['🛋️ Chill Zone','#10b981',19,1,7,9]
+    ['🎵 Music Zone','#a855f7',19,1,7,9]
   ] as [string,string,number,number,number,number][]).forEach(([name,color,zx,zy,zw,zh])=>{
     const px2=zx*T,py2=zy*T,pw=zw*T,ph=zh*T;
     ctx.save();ctx.shadowBlur=14;ctx.shadowColor=color;
@@ -169,8 +182,8 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   });
 
   // ─ Coffee shop interior ───────────────────────────────────────
-  const CX=9*T,CY=1*T;
-  for(let tx=9;tx<14;tx++) S(tx*T,CY);
+  const CX=1*T,CY=1*T;
+  for(let tx=1;tx<9;tx++) S(tx*T,CY);
   // Chalkboard
   {const bx=CX+T*.35,by=CY+5,bw=T*2.8,bh=T*.8;
    ctx.fillStyle='#2a1608';ctx.beginPath();ctx.roundRect(bx-4,by-4,bw+8,bh+8,3);ctx.fill();
@@ -214,7 +227,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
    });
   }
   // Tables + chairs
-  [[10,4],[12,4],[10,7],[12,7]].forEach(([tx2,ty2])=>{
+  [[2,4],[5,4],[2,7],[5,7]].forEach(([tx2,ty2])=>{
     const px=tx2*T+T/2,py=ty2*T+T/2;
     ctx.fillStyle='rgba(0,0,0,0.22)';ctx.beginPath();ctx.ellipse(px+3,py+3,T*.4,T*.35,0,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#3a2208';ctx.beginPath();ctx.arc(px,py,T*.4,0,Math.PI*2);ctx.fill();
@@ -230,7 +243,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     }
   });
   // Café gate entrance
-  {const gx=CX+5*T/2,gy=CY+9*T;
+  {const gx=CX+T*3.5,gy=CY+9*T;
    [gx-T,gx+T].forEach(px=>{
      ctx.fillStyle='#3a2510';ctx.beginPath();ctx.roundRect(px-6,gy-22,12,22,2);ctx.fill();
      ctx.strokeStyle='rgba(245,158,11,0.5)';ctx.lineWidth=1;ctx.stroke();
@@ -330,17 +343,125 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.fillStyle=cf;ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.5,0,Math.PI*2);ctx.fill();ctx.restore();
   };
   // ── Place assets ────────────────────────────────────────────────────────────
-  [2,3,4].forEach(ty=>mcBookshelf(13*T,ty*T));
-  mcBarrel(9*T,5*T); mcBarrel(9*T,6*T);
-  mcCauldron(9*T,3*T);
-  mcFlowerPot(11*T+T-14,3*T+6,'#e74c3c');
-  mcFlowerPot(13*T+T-14,3*T+6,'#f5e642');
-  mcFlowerPot(11*T+T-14,6*T+6,'#e84b6a');
-  mcFlowerPot(13*T+T-14,6*T+6,'#a78bfa');
-  mcFlowerPot(9*T+6,8*T+6,'#2ecc71');
-  mcFlowerPot(13*T+T-18,8*T+6,'#e74c3c');
-  [3,5,7].forEach(ty=>mcLantern(9*T+8,ty*T+T/2));
-  mcCampfire(9*T,8*T);
+  [2,3,4].forEach(ty=>mcBookshelf(8*T,ty*T));
+  mcBarrel(1*T,5*T); mcBarrel(1*T,6*T);
+  mcCauldron(1*T,3*T);
+  mcFlowerPot(3*T+T-14,3*T+6,'#e74c3c');
+  mcFlowerPot(6*T+T-14,3*T+6,'#f5e642');
+  mcFlowerPot(3*T+T-14,6*T+6,'#e84b6a');
+  mcFlowerPot(6*T+T-14,6*T+6,'#a78bfa');
+  mcFlowerPot(1*T+6,8*T+6,'#2ecc71');
+  mcFlowerPot(8*T-18,8*T+6,'#e74c3c');
+  [3,5,7].forEach(ty=>mcLantern(1*T+8,ty*T+T/2));
+  mcCampfire(1*T,8*T);
+
+
+  // ── 🎵 Music Zone canvas assets ───────────────────────────────────────────
+  const MX=19*T, MY=1*T; // music zone top-left
+  // Speaker block helper
+  const mcSpeaker=(px:number,py:number)=>{
+    ctx.fillStyle='#111118';ctx.fillRect(px,py,T,T);
+    ctx.strokeStyle='rgba(168,85,247,0.35)';ctx.lineWidth=1.5;ctx.strokeRect(px+.5,py+.5,T-1,T-1);
+    ctx.fillStyle='#0a0a10';ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.38,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(168,85,247,0.5)';ctx.lineWidth=1;ctx.stroke();
+    [.28,.18,.07].forEach(r=>{
+      ctx.strokeStyle=`rgba(168,85,247,${0.1+r*0.5})`;ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*r,0,Math.PI*2);ctx.stroke();
+    });
+    ctx.fillStyle='rgba(168,85,247,0.7)';ctx.beginPath();ctx.arc(px+T/2,py+T/2,3,0,Math.PI*2);ctx.fill();
+    ctx.save();ctx.globalAlpha=0.1;
+    const sg=ctx.createRadialGradient(px+T/2,py+T/2,0,px+T/2,py+T/2,T*.7);
+    sg.addColorStop(0,'#a855f7');sg.addColorStop(1,'transparent');
+    ctx.fillStyle=sg;ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.7,0,Math.PI*2);ctx.fill();ctx.restore();
+  };
+  // Vinyl poster helper
+  const mcVinyl=(px:number,py:number)=>{
+    ctx.fillStyle='#1a0a2a';ctx.fillRect(px,py,T,T);
+    ctx.strokeStyle='rgba(168,85,247,0.5)';ctx.lineWidth=1.5;ctx.strokeRect(px+.5,py+.5,T-1,T-1);
+    ['#0d0010','#16002a','#0d0010'].forEach((c,i)=>{
+      ctx.fillStyle=c;ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.44-i*8,0,Math.PI*2);ctx.fill();
+    });
+    ctx.fillStyle='#7c2d12';ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.17,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0d0010';ctx.beginPath();ctx.arc(px+T/2,py+T/2,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(168,85,247,0.7)';ctx.font=`${T*.28}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('♫',px+T/2,py+T/2);
+    ctx.fillStyle='rgba(236,72,153,0.5)';ctx.font=`${T*.18}px serif`;
+    ctx.fillText('♪',px+T*.2,py+T*.25);ctx.fillText('♩',px+T*.8,py+T*.75);
+  };
+  // Disco ball
+  const mcDiscoBall=(px:number,py:number)=>{
+    const cx=px+T/2,cy=py+T/2,r=T*.3;
+    ctx.fillStyle='#c0c0c0';ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+    const cols=['#ff69b4','#00ffff','#ffff00','#ff6600','#a855f7'];
+    for(let row=0;row<4;row++) for(let col=0;col<6;col++){
+      const a=(col/6)*Math.PI*2,b=(row/4-.5)*Math.PI;
+      const mx2=cx+Math.cos(a)*Math.cos(b)*r,my2=cy+Math.sin(b)*r;
+      ctx.fillStyle=cols[(row*3+col)%5];ctx.globalAlpha=0.65;
+      ctx.fillRect(mx2-2,my2-2,4,4);ctx.globalAlpha=1;
+    }
+    // Radiant glow beams
+    ctx.save();ctx.globalAlpha=0.08;
+    const dg=ctx.createRadialGradient(cx,cy,0,cx,cy,T*.9);
+    dg.addColorStop(0,'#ffffff');dg.addColorStop(1,'transparent');
+    ctx.fillStyle=dg;ctx.beginPath();ctx.arc(cx,cy,T*.9,0,Math.PI*2);ctx.fill();ctx.restore();
+    // Chain
+    ctx.strokeStyle='rgba(180,180,180,0.5)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy-r-10);ctx.stroke();
+  };
+  // DJ booth / stage
+  {const sx=MX+T*2,sy=MY+T*0.5,sw=T*4,sh=T*1.5;
+   ctx.fillStyle='#1e0a32';ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,4);ctx.fill();
+   ctx.strokeStyle='rgba(168,85,247,0.5)';ctx.lineWidth=2;ctx.stroke();
+   // Stage surface
+   ctx.fillStyle='#2d1045';ctx.beginPath();ctx.roundRect(sx+4,sy+4,sw-8,sh-8,3);ctx.fill();
+   // DJ table
+   ctx.fillStyle='#1a0a28';ctx.beginPath();ctx.roundRect(sx+T*.5,sy+T*.4,T*3,sh-T*.8,3);ctx.fill();
+   ctx.strokeStyle='rgba(168,85,247,0.3)';ctx.lineWidth=1;ctx.stroke();
+   // Turntable circles on table
+   [sx+T,sx+T*2.5].forEach(tx3=>{
+     const ty3=sy+T*.75;
+     ctx.fillStyle='#0d0010';ctx.beginPath();ctx.arc(tx3,ty3,T*.22,0,Math.PI*2);ctx.fill();
+     ctx.strokeStyle='rgba(168,85,247,0.4)';ctx.lineWidth=1;ctx.stroke();
+     ctx.strokeStyle='rgba(168,85,247,0.2)';[.15,.08].forEach(r=>{
+       ctx.beginPath();ctx.arc(tx3,ty3,T*r,0,Math.PI*2);ctx.stroke();
+     });
+     ctx.fillStyle='rgba(168,85,247,0.5)';ctx.beginPath();ctx.arc(tx3,ty3,2,0,Math.PI*2);ctx.fill();
+   });
+   // Mixer (center of table)
+   ctx.fillStyle='#111118';ctx.beginPath();ctx.roundRect(sx+T*1.5,sy+T*.5,T*.9,T*.45,2);ctx.fill();
+   ctx.fillStyle='rgba(168,85,247,0.4)';
+   [0,1,2,3,4].forEach(k=>{
+     ctx.beginPath();ctx.arc(sx+T*(1.6+k*.14),sy+T*.72,3,0,Math.PI*2);ctx.fill();
+   });
+   // "NOW PLAYING" LED strip on stage front
+   const grad=ctx.createLinearGradient(sx,sy+sh-4,sx+sw,sy+sh-4);
+   grad.addColorStop(0,'#a855f7');grad.addColorStop(.5,'#ec4899');grad.addColorStop(1,'#a855f7');
+   ctx.fillStyle=grad;ctx.fillRect(sx,sy+sh-4,sw,4);
+  }
+  // Speakers: four corners + two centre-top
+  [[19,1],[25,1],[19,5],[25,5],[21,1],[23,1]].forEach(([tx2,ty2])=>mcSpeaker(tx2*T,ty2*T));
+  // Vinyl posters on side walls
+  [[19,3],[19,7],[25,3],[25,7]].forEach(([tx2,ty2])=>mcVinyl(tx2*T,ty2*T));
+  // Disco balls
+  [[21,5],[23,5]].forEach(([tx2,ty2])=>mcDiscoBall(tx2*T,ty2*T));
+  // Neon "MUSIC ZONE" sign on back wall
+  {const sx=MX+T*.5,sy=MY+2,sw=T*7-T,sh=28;
+   ctx.fillStyle='rgba(10,0,20,0.85)';ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,5);ctx.fill();
+   ctx.strokeStyle='rgba(168,85,247,0.6)';ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,5);ctx.stroke();
+   ctx.save();ctx.shadowBlur=8;ctx.shadowColor='#a855f7';
+   ctx.fillStyle='#e9d5ff';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.fillText('♪  MUSIC ZONE  ♪',sx+sw/2,sy+sh/2);ctx.restore();
+  }
+  // Dance floor neon edge strip (bottom of zone)
+  const ledGrad=ctx.createLinearGradient(MX,8*T,MX+8*T,8*T);
+  ['#a855f7','#ec4899','#3b82f6','#a855f7'].forEach((c,i,a)=>ledGrad.addColorStop(i/(a.length-1),c));
+  ctx.fillStyle=ledGrad;ctx.fillRect(MX,9*T-4,8*T,4);
+  // Floating music notes scattered on floor
+  ctx.font='16px serif';
+  [[20,4,'♪'],[22,3,'♫'],[24,4,'♩'],[20,7,'♬'],[24,7,'♪'],[22,6,'♫']].forEach(([tx2,ty2,note])=>{
+    ctx.fillStyle=`rgba(168,85,247,0.4)`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(note as string,tx2 as number*T+T/2,ty2 as number*T+T/2);
+  });
 
   // ── Zone gates: Work Pods, Game Lounge, Chill Zone ────────────────────────
   const drawGate=(gx:number,gy:number,col:string,label:string,dark:string)=>{
@@ -365,12 +486,12 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.beginPath();ctx.roundRect(gx-T+6,gy-8,T*2-12,10,3);ctx.fill();
   };
   const GY=10*T; // bottom wall row
-  // Work Pods: gate at tile x=4, center pixel = 4*T+T/2
-  drawGate(4*T+T/2, GY, '#06b6d4', '\u{1F4BB} WORK', '#0a1a2a');
-  // Game Lounge: gate at tile x=16, center pixel = 16*T+T/2
-  drawGate(16*T+T/2, GY, '#a78bfa', '\u{1F3AE} GAMES', '#0d0918');
+  // Coffee: gate at tile x=4
+  drawGate(4*T+T/2, GY, '#f59e0b', '\u2615 CAF\u00C9', '#1a0a00');
+  // Game Lounge: gate at tile x=13
+  drawGate(13*T+T/2, GY, '#a78bfa', '\u{1F3AE} GAMES', '#0d0918');
   // Chill Zone: gate at tile x=22, center pixel = 22*T+T/2
-  drawGate(22*T+T/2, GY, '#10b981', '\u{1F6CB}\uFE0F CHILL', '#0b1a0e');
+  drawGate(22*T+T/2, GY, '#a855f7', '\u{1F3B5} MUSIC', '#0d0618');
 
 }
 
@@ -521,6 +642,11 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const [globalInput,   setGlobalInput]   = useState('');
   const [proxInput,     setProxInput]     = useState('');
   const [chatTab,       setChatTab]       = useState<'global'|'proximity'>('global');
+  const [musicIdx,  setMusicIdx]  = useState(0);
+  const [musicOn,   setMusicOn]   = useState(false);
+  const inMusicZone = myPos ? (myPos.x>=19 && myPos.x<26 && myPos.y>=1 && myPos.y<10) : false;
+  // Auto-stop music when player leaves Music Zone
+  React.useEffect(() => { if (!inMusicZone) setMusicOn(false); }, [inMusicZone]);
 
   const gameAreaRef  = useRef<HTMLDivElement>(null);
   const globalEndRef = useRef<HTMLDivElement>(null);
@@ -595,6 +721,8 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
             setTimeout(()=>scrollToBottom(globalEndRef),50);
             break;
           }
+          case 'music_change':
+            setMusicIdx(msg.payload.idx ?? 0); break;
           case 'proximity-chat': {
             const m: ChatMsg = { id:Math.random().toString(36), ...msg.payload, type:'proximity' };
             setProximityMsgs(prev=>[...prev,m].slice(-100));
@@ -656,6 +784,10 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
     wsRef.current.send(JSON.stringify({ type:'move', payload:{x:nx,y:ny} }));
   }, [myPos]);
 
+  const sendMusic = (idx: number) => {
+    setMusicIdx(idx);
+    wsRef.current?.send(JSON.stringify({ type:'music_change', payload:{ idx } }));
+  };
   const sendGlobal = () => {
     if(!globalInput.trim()||!wsRef.current) return;
     wsRef.current.send(JSON.stringify({ type:'chat', payload:{ message:globalInput.trim() } }));
@@ -745,7 +877,34 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
             background:'var(--bg-3)', padding:'3px 8px', borderRadius:5, border:'1px solid var(--border-light)' }}>
             {myUsername} ({myPos.x},{myPos.y})
           </span>}
+          {/* ── 🎵 Music Player ── */}
+          <div style={{
+            display:'flex',alignItems:'center',gap:8,
+            background:'rgba(168,85,247,0.12)',border:'1px solid rgba(168,85,247,0.35)',
+            borderRadius:8,padding:'4px 10px',cursor:'default',
+          }}>
+
+            <span style={{fontSize:14}}>🎵</span>
+            <div style={{display:'flex',flexDirection:'column',lineHeight:1.2}}>
+              <span style={{fontSize:11,color:'#e9d5ff',fontWeight:600,maxWidth:120,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{MUSIC_TRACKS[musicIdx].title}</span>
+              <span style={{fontSize:9,color:'rgba(168,85,247,0.7)'}}>{MUSIC_TRACKS[musicIdx].artist}</span>
+            </div>
+            <div style={{display:'flex',gap:3}}>
+              <button onClick={()=>sendMusic((musicIdx-1+MUSIC_TRACKS.length)%MUSIC_TRACKS.length)}
+                style={{background:'none',border:'none',color:'#c4b5fd',cursor:'pointer',fontSize:13,padding:'2px 4px'}}>⏮</button>
+              <button onClick={()=>setMusicOn(p=>!p)}
+                style={{background:'rgba(168,85,247,0.25)',border:'1px solid rgba(168,85,247,0.4)',color:'#e9d5ff',cursor:'pointer',fontSize:13,borderRadius:4,padding:'2px 6px'}}>
+                {musicOn?'⏸':'▶'}
+              </button>
+              <button onClick={()=>sendMusic((musicIdx+1)%MUSIC_TRACKS.length)}
+                style={{background:'none',border:'none',color:'#c4b5fd',cursor:'pointer',fontSize:13,padding:'2px 4px'}}>⏭</button>
+              <button onClick={()=>sendMusic(Math.floor(Math.random()*MUSIC_TRACKS.length))}
+                title="Shuffle — changes for everyone!"
+                style={{background:'none',border:'none',color:'#a78bfa',cursor:'pointer',fontSize:12,padding:'2px 4px'}}>🔀</button>
+            </div>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={onLeave}>← Leave</button>
+
         </div>
       </div>
 
@@ -868,6 +1027,56 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
         <span style={{ fontSize:11,color:'var(--text-3)' }}>•</span>
         <span style={{ fontSize:11,color:'var(--text-3)' }}>Click canvas first to move</span>
       </div>
+
+      {/* ── 🎵 Floating Music Player ── */}
+      {musicOn && inMusicZone && (
+        <div style={{
+          position:'fixed', bottom:24, right:24, zIndex:9999,
+          background:'rgba(10,0,22,0.97)',
+          border:'1.5px solid rgba(168,85,247,0.55)',
+          borderRadius:12,overflow:'hidden',
+          boxShadow:'0 0 24px rgba(168,85,247,0.35)',
+          minWidth:220,
+        }}>
+          {/* Header */}
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',
+            background:'rgba(168,85,247,0.15)',borderBottom:'1px solid rgba(168,85,247,0.25)'}}>
+            <span style={{fontSize:14}}>🎵</span>
+            <div style={{flex:1,overflow:'hidden'}}>
+              <div style={{fontSize:11,color:'#e9d5ff',fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                {MUSIC_TRACKS[musicIdx].title}
+              </div>
+              <div style={{fontSize:9,color:'rgba(168,85,247,0.7)'}}>{MUSIC_TRACKS[musicIdx].artist}</div>
+            </div>
+            <button onClick={()=>setMusicOn(false)}
+              style={{background:'none',border:'none',color:'#c4b5fd',cursor:'pointer',fontSize:14,lineHeight:1}}>✕</button>
+          </div>
+          {/* YouTube embed — must be visible for audio to play */}
+          <iframe
+            key={`yt-${musicIdx}`}
+            width="220" height="124"
+            src={`https://www.youtube.com/embed/${MUSIC_TRACKS[musicIdx].yt}?autoplay=1&loop=1&playlist=${MUSIC_TRACKS[musicIdx].yt}&controls=1&rel=0`}
+            title="Music Player"
+            allow="autoplay; encrypted-media"
+            allowFullScreen
+            style={{display:'block',border:'none'}}
+          />
+          {/* Controls */}
+          <div style={{display:'flex',justifyContent:'center',gap:6,padding:'6px 8px',
+            background:'rgba(168,85,247,0.1)'}}>
+            <button onClick={()=>sendMusic((musicIdx-1+MUSIC_TRACKS.length)%MUSIC_TRACKS.length)}
+              style={{background:'rgba(168,85,247,0.2)',border:'1px solid rgba(168,85,247,0.3)',
+                color:'#c4b5fd',cursor:'pointer',borderRadius:6,padding:'3px 10px',fontSize:14}}>⏮</button>
+            <button onClick={()=>sendMusic((musicIdx+1)%MUSIC_TRACKS.length)}
+              style={{background:'rgba(168,85,247,0.2)',border:'1px solid rgba(168,85,247,0.3)',
+                color:'#c4b5fd',cursor:'pointer',borderRadius:6,padding:'3px 10px',fontSize:14}}>⏭</button>
+            <button onClick={()=>sendMusic(Math.floor(Math.random()*MUSIC_TRACKS.length))}
+              title="Shuffle for everyone"
+              style={{background:'rgba(236,72,153,0.15)',border:'1px solid rgba(236,72,153,0.3)',
+                color:'#f9a8d4',cursor:'pointer',borderRadius:6,padding:'3px 10px',fontSize:14}}>🔀</button>
+          </div>
+        </div>
+      )}
 
       <ToastContainer toasts={toasts} />
     </div>
