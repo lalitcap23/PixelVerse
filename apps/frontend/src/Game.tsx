@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { SlotMachine } from './games/SlotMachine';
+import { RPS } from './games/RPS';
+import { TicTacToe, checkWinner } from './games/TicTacToe';
 import { WS_URL } from './api';
 import { Logo, ToastContainer, useToast } from './components';
 
@@ -463,6 +466,54 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.fillText(note as string,tx2 as number*T+T/2,ty2 as number*T+T/2);
   });
 
+
+  // ── 🎮 Game Zone canvas assets ─────────────────────────────────────────────
+  const GZX=10*T, GZY=1*T;
+  // Neon GAME ZONE sign
+  {const sx=GZX+T*.5,sy=GZY+2,sw=8*T-T,sh=28;
+   ctx.fillStyle='rgba(8,0,20,0.88)';ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,5);ctx.fill();
+   ctx.strokeStyle='rgba(139,92,246,0.6)';ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,5);ctx.stroke();
+   ctx.save();ctx.shadowBlur=10;ctx.shadowColor='#a855f7';
+   ctx.fillStyle='#e9d5ff';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.fillText('★  GAME  ARCADE  ★',sx+sw/2,sy+sh/2);ctx.restore();}
+  // Arcade machine helper
+  const arcadeMachine=(px:number,py:number,col:string,label:string,icon:string)=>{
+    // Cabinet body
+    ctx.fillStyle='#111118';ctx.beginPath();ctx.roundRect(px+4,py+4,T-8,T-8,4);ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(px+4,py+4,T-8,T-8,4);ctx.stroke();
+    // Screen
+    ctx.fillStyle='#0a0010';ctx.beginPath();ctx.roundRect(px+8,py+8,T-16,T*.45,3);ctx.fill();
+    ctx.strokeStyle=col.replace(')',',0.6)').replace('rgb','rgba')||col;ctx.lineWidth=1;ctx.stroke();
+    // Icon on screen
+    ctx.font=`${T*.3}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=col;
+    ctx.fillText(icon,px+T/2,py+T*.28);
+    // Label strip
+    ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fillRect(px+4,py+T*.55,T-8,T*.15);
+    ctx.fillStyle=col;ctx.font=`bold ${T*.13}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(label,px+T/2,py+T*.625);
+    // Buttons row
+    [[.3,.8],[.5,.8],[.7,.8]].forEach(([rx,ry])=>{ctx.fillStyle=col;ctx.beginPath();ctx.arc(px+T*rx,py+T*ry,3,0,Math.PI*2);ctx.fill();});
+    // Glow
+    ctx.save();ctx.globalAlpha=0.08;
+    const ag=ctx.createRadialGradient(px+T/2,py+T/2,0,px+T/2,py+T/2,T*.7);
+    ag.addColorStop(0,col);ag.addColorStop(1,'transparent');
+    ctx.fillStyle=ag;ctx.beginPath();ctx.arc(px+T/2,py+T/2,T*.7,0,Math.PI*2);ctx.fill();ctx.restore();
+  };
+  // Three arcade machines
+  arcadeMachine(GZX+T*1, GZY+T*2, '#fbbf24', 'SLOTS',     '🎰');
+  arcadeMachine(GZX+T*3.5, GZY+T*2, '#60a5fa', 'RPS',    '🎲');
+  arcadeMachine(GZX+T*6, GZY+T*2, '#a78bfa',   'TTT',    '🎯');
+  // Score ticker strip
+  {const sx=GZX,sy=GZY+T*5,sw=8*T,sh=T*.6;
+   const grad=ctx.createLinearGradient(sx,sy,sx+sw,sy);
+   grad.addColorStop(0,'#7c3aed');grad.addColorStop(.5,'#4f46e5');grad.addColorStop(1,'#7c3aed');
+   ctx.fillStyle=grad;ctx.fillRect(sx,sy,sw,sh);
+   ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font=`bold ${T*.18}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.fillText('🏆  HIGH SCORE  •  PLAY NOW  •  🕹️',sx+sw/2,sy+sh/2);}
+  // Neon floor strips
+  const fledGrad=ctx.createLinearGradient(GZX,9*T,GZX+8*T,9*T);
+  ['#7c3aed','#a855f7','#4f46e5','#7c3aed'].forEach((c,i,a)=>fledGrad.addColorStop(i/(a.length-1),c));
+  ctx.fillStyle=fledGrad;ctx.fillRect(GZX,9*T-4,8*T,4);
   // ── Zone gates: Work Pods, Game Lounge, Chill Zone ────────────────────────
   const drawGate=(gx:number,gy:number,col:string,label:string,dark:string)=>{
     [gx-T,gx+T].forEach(px=>{
@@ -645,6 +696,13 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const [musicIdx,  setMusicIdx]  = useState(0);
   const [musicOn,   setMusicOn]   = useState(false);
   const inMusicZone = myPos ? (myPos.x>=19 && myPos.x<26 && myPos.y>=1 && myPos.y<10) : false;
+  const inGameZone  = myPos ? (myPos.x>=10 && myPos.x<18 && myPos.y>=1 && myPos.y<10) : false;
+  const [activeGame, setActiveGame] = useState<'slot'|'rps'|'ttt'|null>(null);
+  // Tic-Tac-Toe shared state
+  const [tttBoard, setTttBoard] = useState<(string|null)[]>(Array(9).fill(null));
+  const [tttTurn,  setTttTurn]  = useState<'X'|'O'>('X');
+  const [tttSymbol,setTttSymbol]= useState<'X'|'O'|null>(null);
+  const [tttPlayers,setTttPlayers]=useState<string[]>([]);
   // Auto-stop music when player leaves Music Zone
   React.useEffect(() => { if (!inMusicZone) setMusicOn(false); }, [inMusicZone]);
 
@@ -723,6 +781,17 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
           }
           case 'music_change':
             setMusicIdx(msg.payload.idx ?? 0); break;
+          case 'ttt_join':
+            setTttPlayers(prev=>{const n=[...new Set([...prev,msg.payload.userId])];return n;});
+            // Assign symbol: first joiner=X, second=O
+            setTttSymbol(prev=>prev); // symbol assigned on join send
+            break;
+          case 'ttt_move':
+            setTttBoard(prev=>{const b=[...prev];b[msg.payload.cell]=msg.payload.sym;return b;});
+            setTttTurn(prev=>prev==='X'?'O':'X');
+            break;
+          case 'ttt_reset':
+            setTttBoard(Array(9).fill(null));setTttTurn('X');break;
           case 'proximity-chat': {
             const m: ChatMsg = { id:Math.random().toString(36), ...msg.payload, type:'proximity' };
             setProximityMsgs(prev=>[...prev,m].slice(-100));
@@ -787,6 +856,23 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const sendMusic = (idx: number) => {
     setMusicIdx(idx);
     wsRef.current?.send(JSON.stringify({ type:'music_change', payload:{ idx } }));
+  };
+  const sendTttMove=(cell:number)=>{
+    if(!tttSymbol||tttTurn!==tttSymbol)return;
+    const b=[...tttBoard];b[cell]=tttSymbol;
+    setTttBoard(b);setTttTurn(t=>t==='X'?'O':'X');
+    wsRef.current?.send(JSON.stringify({type:'ttt_move',payload:{cell,sym:tttSymbol}}));
+  };
+  const sendTttReset=()=>{
+    setTttBoard(Array(9).fill(null));setTttTurn('X');
+    wsRef.current?.send(JSON.stringify({type:'ttt_reset'}));
+  };
+  const joinTtt=()=>{
+    // Assign X to first, O to second
+    const sym=tttPlayers.length===0?'X':'O';
+    setTttSymbol(sym);
+    setTttPlayers(prev=>[...new Set([...prev,myUserId])]);
+    wsRef.current?.send(JSON.stringify({type:'ttt_join',payload:{userId:myUserId,sym}}));
   };
   const sendGlobal = () => {
     if(!globalInput.trim()||!wsRef.current) return;
@@ -1027,6 +1113,51 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
         <span style={{ fontSize:11,color:'var(--text-3)' }}>•</span>
         <span style={{ fontSize:11,color:'var(--text-3)' }}>Click canvas first to move</span>
       </div>
+
+
+      {/* 🎮 Game Zone Arcade Panel */}
+      {inGameZone && !activeGame && (
+        <div style={{
+          position:'fixed',right:24,top:'50%',transform:'translateY(-50%)',
+          background:'rgba(8,0,20,0.97)',border:'1.5px solid rgba(139,92,246,0.5)',
+          borderRadius:16,padding:20,width:220,zIndex:9000,
+          boxShadow:'0 0 40px rgba(139,92,246,0.3)',
+        }}>
+          <div style={{textAlign:'center',marginBottom:16}}>
+            <div style={{fontSize:20,marginBottom:4}}>🕹️</div>
+            <div style={{fontWeight:700,color:'#e9d5ff',fontSize:15}}>Game Arcade</div>
+            <div style={{fontSize:11,color:'rgba(255,255,255,0.35)',marginTop:2}}>Choose a game</div>
+          </div>
+          {([
+            {id:'slot',icon:'🎰',name:'Slot Machine',desc:'Single player',col:'#fbbf24'},
+            {id:'rps', icon:'🎲',name:'Rock Paper Scissors',desc:'vs Computer',col:'#60a5fa'},
+            {id:'ttt', icon:'🎯',name:'Tic-Tac-Toe',desc:'2 Player (WS)',col:'#a78bfa'},
+          ] as const).map(g=>(
+            <button key={g.id} onClick={()=>{setActiveGame(g.id);if(g.id==='ttt')joinTtt();}}
+              style={{
+                display:'flex',alignItems:'center',gap:10,width:'100%',
+                background:'rgba(255,255,255,0.04)',border:`1px solid ${g.col}33`,
+                borderRadius:10,padding:'10px 14px',marginBottom:8,cursor:'pointer',
+                color:'white',textAlign:'left',transition:'background 0.2s',
+              }}>
+              <span style={{fontSize:24}}>{g.icon}</span>
+              <div><div style={{fontWeight:600,fontSize:13,color:g.col}}>{g.name}</div><div style={{fontSize:10,color:'rgba(255,255,255,0.35)'}}>{g.desc}</div></div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Game modals */}
+      {activeGame==='slot' && <SlotMachine onClose={()=>setActiveGame(null)} />}
+      {activeGame==='rps'  && <RPS onClose={()=>setActiveGame(null)} />}
+      {activeGame==='ttt'  && (
+        <TicTacToe
+          onClose={()=>setActiveGame(null)}
+          board={tttBoard} turn={tttTurn} symbol={tttSymbol}
+          onMove={sendTttMove} onReset={sendTttReset}
+          otherOnline={tttPlayers.length>=2}
+        />
+      )}
 
       {/* ── 🎵 Floating Music Player ── */}
       {musicOn && inMusicZone && (
