@@ -21,68 +21,297 @@ const FURNITURE = [
   {tx:2,ty:12,e:'📡'},{tx:7,ty:12,e:'🏆'},{tx:12,ty:12,e:'🎯'},{tx:17,ty:12,e:'🔭'},
 ];
 
+const ZONES = [
+  { name:'💻 Work Pods',     x:1,  y:1, w:8,  h:9,  border:'rgba(6,182,212,0.35)',   label:'#06b6d4' },
+  { name:'☕ Coffee Corner', x:9,  y:1, w:6,  h:9,  border:'rgba(245,158,11,0.35)', label:'#f59e0b' },
+  { name:'🎮 Game Lounge',   x:13, y:1, w:6,  h:9,  border:'rgba(139,92,246,0.35)', label:'#a78bfa' },
+  { name:'🛋️ Chill Zone',  x:17, y:1, w:8,  h:9,  border:'rgba(16,185,129,0.35)',  label:'#10b981' },
+];
+const getZoneAt = (p:{x:number;y:number}) =>
+  ZONES.find(z => p.x>=z.x && p.x<z.x+z.w && p.y>=z.y && p.y<z.y+z.h) ?? null;
+
+// ── Pure-canvas background renderer ───────────────────────────────────────
+function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const T = TILE;
+
+  // Base void
+  ctx.fillStyle = '#06060f'; ctx.fillRect(0,0,w,h);
+
+  // ── Road / corridor (y tiles 10-11, full width) ──────────────────────────
+  for(let tx=0;tx<w/T;tx++){
+    for(const ty of [10,11]){
+      ctx.fillStyle = (tx+ty)%2===0 ? '#111120' : '#0f0f1e';
+      ctx.fillRect(tx*T,ty*T,T,T);
+    }
+    // Dashed center-line
+    ctx.fillStyle='rgba(255,220,50,0.18)';
+    ctx.fillRect(tx*T+T*0.45, 10*T+T-3, T*0.1, 6);
+    // Road edge lines
+    ctx.fillStyle='rgba(255,255,255,0.06)';
+    ctx.fillRect(tx*T,10*T,T,2);
+    ctx.fillRect(tx*T,12*T-2,T,2);
+  }
+
+  // Vertical connector road (x tiles 0, y 0-10)
+  for(let ty=0;ty<10;ty++){
+    ctx.fillStyle=(ty%2===0)?'#0e0e1c':'#0c0c1a';
+    ctx.fillRect(0,ty*T,T,T);
+    ctx.fillStyle='rgba(255,255,255,0.04)';
+    ctx.fillRect(T-2,ty*T,2,T);
+  }
+
+  // ── 💻 Work Pods floor (x1-8, y1-9) — cool blue slate tiles ─────────────
+  for(let tx=1;tx<9;tx++) for(let ty=1;ty<10;ty++){
+    const light=(tx+ty)%2===0;
+    ctx.fillStyle=light?'#0d1520':'#0b1219';
+    ctx.fillRect(tx*T,ty*T,T,T);
+    // Subtle grout lines
+    ctx.strokeStyle='rgba(6,182,212,0.06)'; ctx.lineWidth=1;
+    ctx.strokeRect(tx*T+0.5,ty*T+0.5,T-1,T-1);
+  }
+  // Desk surfaces (3 desks)
+  const deskColor='rgba(6,182,212,0.12)';
+  [[2,3],[4,3],[6,3],[2,7],[4,7],[6,7]].forEach(([dx,dy])=>{
+    ctx.fillStyle=deskColor;
+    ctx.beginPath(); ctx.roundRect(dx*T+4,dy*T+8,T*1.7,T*0.55,4); ctx.fill();
+    ctx.strokeStyle='rgba(6,182,212,0.2)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(dx*T+4,dy*T+8,T*1.7,T*0.55,4); ctx.stroke();
+    // Monitor glow
+    ctx.fillStyle='rgba(6,182,212,0.25)';
+    ctx.beginPath(); ctx.roundRect(dx*T+T*0.6,dy*T+3,T*0.7,T*0.45,3); ctx.fill();
+    ctx.fillStyle='rgba(6,182,212,0.6)';
+    ctx.fillRect(dx*T+T*0.88,dy*T+3,2,T*0.45);
+  });
+
+  // ── ☕ Coffee Corner floor (x9-14, y1-9) — warm wood planks ─────────────
+  for(let tx=9;tx<15;tx++) for(let ty=1;ty<10;ty++){
+    ctx.fillStyle=(tx+ty)%2===0?'#1a1108':'#1c1309';
+    ctx.fillRect(tx*T,ty*T,T,T);
+    // Wood grain
+    for(let g=0;g<3;g++){
+      ctx.strokeStyle=`rgba(160,100,40,${0.04+g*0.02})`; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx*T,ty*T+T*0.25*g); ctx.lineTo(tx*T+T,ty*T+T*0.25*g+4); ctx.stroke();
+    }
+  }
+  // Coffee tables (round)
+  [[10,3],[12,3],[11,7],[13,7]].forEach(([cx,cy])=>{
+    const px=cx*T+T/2, py=cy*T+T/2;
+    // Table surface
+    ctx.beginPath(); ctx.arc(px,py,T*0.42,0,Math.PI*2);
+    ctx.fillStyle='#2a1c0a'; ctx.fill();
+    ctx.strokeStyle='rgba(245,158,11,0.35)'; ctx.lineWidth=1.5; ctx.stroke();
+    // Coffee cup
+    ctx.fillStyle='rgba(245,158,11,0.5)';
+    ctx.beginPath(); ctx.roundRect(px-5,py-6,10,10,2); ctx.fill();
+    ctx.fillStyle='#3d200a';
+    ctx.beginPath(); ctx.ellipse(px,py-2,4,3,0,0,Math.PI*2); ctx.fill();
+    // Steam
+    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1.5; ctx.setLineDash([2,2]);
+    ctx.beginPath(); ctx.moveTo(px-3,py-9); ctx.quadraticCurveTo(px-6,py-14,px-3,py-18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+3,py-9); ctx.quadraticCurveTo(px+6,py-14,px+3,py-18); ctx.stroke();
+    ctx.setLineDash([]);
+    // Chairs
+    for(let a=0;a<4;a++){
+      const angle=a*Math.PI/2+Math.PI/4;
+      const cx2=px+Math.cos(angle)*T*0.52, cy2=py+Math.sin(angle)*T*0.52;
+      ctx.beginPath(); ctx.arc(cx2,cy2,5,0,Math.PI*2);
+      ctx.fillStyle='#3d2a10'; ctx.fill();
+      ctx.strokeStyle='rgba(245,158,11,0.2)'; ctx.lineWidth=1; ctx.stroke();
+    }
+  });
+
+  // ── 🎮 Game Lounge floor (x13-18, y1-9) — dark with glow grid ───────────
+  for(let tx=13;tx<19;tx++) for(let ty=1;ty<10;ty++){
+    ctx.fillStyle=(tx+ty)%2===0?'#0e0818':'#0c061a';
+    ctx.fillRect(tx*T,ty*T,T,T);
+    // Neon grid
+    ctx.strokeStyle='rgba(139,92,246,0.1)'; ctx.lineWidth=1;
+    ctx.strokeRect(tx*T+1,ty*T+1,T-2,T-2);
+  }
+  // Arcade cabinet shapes
+  [[14,4],[16,4],[14,8],[16,8]].forEach(([ax,ay])=>{
+    const px=ax*T+T/2, py=ay*T+T/2;
+    // Cabinet body
+    ctx.fillStyle='#1a0f2e';
+    ctx.beginPath(); ctx.roundRect(px-12,py-16,24,30,4); ctx.fill();
+    ctx.strokeStyle='rgba(139,92,246,0.5)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(px-12,py-16,24,30,4); ctx.stroke();
+    // Screen
+    ctx.fillStyle='#0d0620';
+    ctx.beginPath(); ctx.roundRect(px-8,py-13,16,14,2); ctx.fill();
+    ctx.fillStyle=`hsl(${(ax*37+ay*71)%360},80%,55%)`;
+    ctx.globalAlpha=0.7;
+    ctx.beginPath(); ctx.roundRect(px-6,py-11,12,10,1); ctx.fill();
+    ctx.globalAlpha=1;
+    // Joystick
+    ctx.fillStyle='#2d1a4a';
+    ctx.beginPath(); ctx.arc(px-4,py+8,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#a78bfa';
+    ctx.beginPath(); ctx.arc(px-4,py+6,2.5,0,Math.PI*2); ctx.fill();
+    // Button
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath(); ctx.arc(px+6,py+8,3,0,Math.PI*2); ctx.fill();
+  });
+
+  // ── 🛋️ Chill Zone floor (x17-24, y1-9) — soft nature green ─────────────
+  for(let tx=17;tx<25;tx++) for(let ty=1;ty<10;ty++){
+    ctx.fillStyle=(tx+ty)%2===0?'#0b1a0e':'#0d1f10';
+    ctx.fillRect(tx*T,ty*T,T,T);
+    // Grass texture dots
+    if((tx*3+ty*7)%5===0){
+      ctx.fillStyle='rgba(16,185,129,0.12)';
+      ctx.beginPath(); ctx.arc(tx*T+T*0.3,ty*T+T*0.6,3,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(tx*T+T*0.7,ty*T+T*0.3,2,0,Math.PI*2); ctx.fill();
+    }
+  }
+  // Couch shapes
+  [[18,3],[21,3],[18,7],[21,7]].forEach(([sx,sy])=>{
+    const px=sx*T, py=sy*T;
+    // Couch body
+    ctx.fillStyle='#1a3320';
+    ctx.beginPath(); ctx.roundRect(px+3,py+8,T*2.2,T*0.65,6); ctx.fill();
+    ctx.strokeStyle='rgba(16,185,129,0.3)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(px+3,py+8,T*2.2,T*0.65,6); ctx.stroke();
+    // Back rest
+    ctx.fillStyle='#163d1a';
+    ctx.beginPath(); ctx.roundRect(px+3,py+3,T*2.2,T*0.35,4); ctx.fill();
+    // Cushions
+    [0,1].forEach(i=>{
+      ctx.fillStyle='rgba(16,185,129,0.15)';
+      ctx.beginPath(); ctx.roundRect(px+5+i*T,py+9,T*0.9,T*0.45,4); ctx.fill();
+    });
+  });
+
+  // ── Outer area (beyond zones) — dark concrete ────────────────────────────
+  // Already covered by base, just add subtle noise for areas outside zones
+  for(let tx=1;tx<w/T;tx+=3) for(let ty=12;ty<h/T;ty+=2){
+    ctx.fillStyle='rgba(255,255,255,0.008)';
+    ctx.fillRect(tx*T+T*0.1,ty*T+T*0.1,T*0.8,T*0.8);
+  }
+}
+
 function drawScene(
   ctx: CanvasRenderingContext2D, w: number, h: number,
   myPos: {x:number;y:number}|null,
   others: Map<string,UserState>,
   myUsername: string,
+  myUserId: string,
+  avatarImgs: Map<string, HTMLImageElement>,
 ) {
-  ctx.fillStyle='#080818'; ctx.fillRect(0,0,w,h);
-  // floor
-  for(let tx=0;tx<w/TILE;tx++) for(let ty=0;ty<h/TILE;ty++) {
-    ctx.fillStyle=(tx+ty)%2===0?'rgba(124,58,237,0.04)':'rgba(6,182,212,0.025)';
-    ctx.fillRect(tx*TILE,ty*TILE,TILE,TILE);
-  }
-  // furniture
+  // ── Rich canvas background ──────────────────────────────
+  drawBackground(ctx, w, h);
+
+  // ── Zone label overlays ────────────────────────────────
+  ZONES.forEach(({x,y,w:zw,h:zh,border,name,label}) => {
+    const px=x*TILE,py=y*TILE,pw=zw*TILE,ph=zh*TILE;
+    // Border glow
+    ctx.save();
+    ctx.shadowBlur=12; ctx.shadowColor=border.replace('0.35','0.6');
+    ctx.strokeStyle=border; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+    ctx.strokeRect(px+1,py+1,pw-2,ph-2);
+    ctx.setLineDash([]); ctx.restore();
+    // Zone name pill
+    ctx.font='bold 11px Inter,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    const tw=ctx.measureText(name).width;
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(px+5,py+4,tw+12,18,5); ctx.fill();
+    ctx.fillStyle=label; ctx.fillText(name,px+11,py+8);
+  });
+
+  // ── Furniture ─────────────────────────────────────────
   ctx.font=`${TILE*0.55}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
   FURNITURE.forEach(({tx,ty,e}) => {
     ctx.fillStyle='rgba(255,255,255,0.03)';
     ctx.fillRect(tx*TILE+2,ty*TILE+2,TILE-4,TILE-4);
     ctx.fillText(e,tx*TILE+TILE/2,ty*TILE+TILE/2);
   });
-  // grid
-  ctx.strokeStyle='rgba(124,58,237,0.09)'; ctx.lineWidth=1;
+
+  // ── Grid ──────────────────────────────────────────────
+  ctx.strokeStyle='rgba(124,58,237,0.07)'; ctx.lineWidth=1;
   for(let x=0;x<=w;x+=TILE){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
   for(let y=0;y<=h;y+=TILE){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
-  // proximity ring around self
+
+  // ── Proximity ring ────────────────────────────────────
   if(myPos){
     const cx=myPos.x*TILE+TILE/2,cy=myPos.y*TILE+TILE/2,r=PROX*TILE;
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-    g.addColorStop(0,'rgba(124,58,237,0)'); g.addColorStop(0.75,'rgba(124,58,237,0)'); g.addColorStop(1,'rgba(124,58,237,0.13)');
+    g.addColorStop(0,'rgba(124,58,237,0)'); g.addColorStop(0.75,'rgba(124,58,237,0)'); g.addColorStop(1,'rgba(124,58,237,0.12)');
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle='rgba(124,58,237,0.18)'; ctx.lineWidth=1; ctx.setLineDash([6,4]);
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
   }
-  // draw avatar fn
-  const drawAvatar = (x:number,y:number,label:string,color:string,isMe:boolean,nearby:boolean) => {
-    const cx=x*TILE+TILE/2,cy=y*TILE+TILE/2,r=isMe?17:14;
-    if(nearby&&!isMe){
-      ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,r+7,0,Math.PI*2);
-      ctx.strokeStyle='#10b981'; ctx.lineWidth=2; ctx.globalAlpha=0.6; ctx.stroke(); ctx.restore();
+
+  // ── Draw avatar ───────────────────────────────────────
+  const drawAvatar = (ax:number, ay:number, uid:string, label:string, color:string, isMe:boolean, nearby:boolean) => {
+    const cx=ax*TILE+TILE/2, cy=ay*TILE+TILE/2;
+    const size = isMe ? 40 : 34;
+    const r = size/2;
+    const img = avatarImgs.get(uid);
+
+    // Nearby glow ring
+    if(nearby && !isMe){
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r+8,0,Math.PI*2);
+      ctx.strokeStyle='#10b981'; ctx.lineWidth=2.5; ctx.globalAlpha=0.5;
+      ctx.stroke(); ctx.restore();
     }
-    ctx.save(); ctx.shadowBlur=isMe?22:(nearby?16:10); ctx.shadowColor=isMe?'#7c3aed':(nearby?'#10b981':color);
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
-    const g=ctx.createRadialGradient(cx-r*0.3,cy-r*0.3,1,cx,cy,r);
-    g.addColorStop(0,lighten(isMe?'#7c3aed':color)); g.addColorStop(1,isMe?'#7c3aed':color);
-    ctx.fillStyle=g; ctx.fill();
-    ctx.strokeStyle=isMe?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.3)';
-    ctx.lineWidth=isMe?2.5:1.5; ctx.stroke(); ctx.restore();
-    ctx.font=`${r}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(isMe?'😊':uEmoji(label),cx,cy);
-    const tag=isMe?myUsername:(label.slice(0,10));
-    ctx.font='bold 9px Inter,sans-serif';
-    const tw=ctx.measureText(tag).width;
-    ctx.fillStyle='rgba(0,0,0,0.6)';
-    ctx.fillRect(cx-tw/2-4,cy+r+3,tw+8,14);
-    ctx.fillStyle=isMe?'#c084fc':(nearby?'#6ee7b7':'#a8a3c8');
-    ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText(tag,cx,cy+r+5);
+
+    ctx.save();
+    ctx.shadowBlur = isMe?24:(nearby?18:10);
+    ctx.shadowColor = isMe?'#7c3aed':(nearby?'#10b981':color);
+
+    if(img){
+      // Tinted backing circle
+      ctx.beginPath(); ctx.arc(cx,cy,r+3,0,Math.PI*2);
+      ctx.fillStyle = isMe?'rgba(124,58,237,0.35)':`${color}44`;
+      ctx.fill();
+      // Clip to circle then draw sprite
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.clip();
+      ctx.drawImage(img,cx-r,cy-r,size,size);
+      ctx.restore();
+      // Ring border
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.strokeStyle = isMe?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.25)';
+      ctx.lineWidth = isMe?2.5:1.5; ctx.stroke();
+    } else {
+      // Fallback gradient circle
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      const g=ctx.createRadialGradient(cx-r*0.3,cy-r*0.3,1,cx,cy,r);
+      g.addColorStop(0,lighten(isMe?'#7c3aed':color)); g.addColorStop(1,isMe?'#7c3aed':color);
+      ctx.fillStyle=g; ctx.fill();
+      ctx.strokeStyle=isMe?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.3)';
+      ctx.lineWidth=isMe?2.5:1.5; ctx.stroke();
+      ctx.font=`${r*0.9}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(isMe?'😊':uEmoji(uid),cx,cy);
+    }
+    ctx.restore();
+
+    // Crown for self
+    if(isMe){
+      ctx.font='12px serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText('👑',cx,cy-r-2);
+    }
+
+    // Name tag pill
+    const tag = isMe ? myUsername : label.slice(0,12);
+    ctx.font='bold 9px Inter,sans-serif'; ctx.textAlign='center';
+    const tw = ctx.measureText(tag).width;
+    const tx2=cx-tw/2-5, ty2=cy+r+5, th=15, tw2=tw+10;
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.beginPath();
+    ctx.roundRect(tx2,ty2,tw2,th,6);
+    ctx.fill();
+    ctx.fillStyle = isMe?'#c084fc':(nearby?'#6ee7b7':'#a8a3c8');
+    ctx.textBaseline='top';
+    ctx.fillText(tag,cx,ty2+3);
   };
+
   others.forEach((u) => {
     const nearby = myPos ? dist(myPos,u)<=PROX : false;
-    drawAvatar(u.x,u.y,u.username||u.userId,uColor(u.userId),false,nearby);
+    drawAvatar(u.x,u.y,u.userId,u.username||u.userId,uColor(u.userId),false,nearby);
   });
-  if(myPos) drawAvatar(myPos.x,myPos.y,'me','#7c3aed',true,false);
+  if(myPos) drawAvatar(myPos.x,myPos.y,myUserId,'me','#7c3aed',true,false);
 }
 
 export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
@@ -91,9 +320,15 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
 
   const [myPos,      setMyPos]      = useState<{x:number;y:number}|null>(null);
   const [myUsername, setMyUsername] = useState('You');
+  const [myUserId,   setMyUserId]   = useState('');
   const [others,     setOthers]     = useState<Map<string,UserState>>(new Map());
   const [connected,  setConnected]  = useState(false);
   const [nearbyIds,  setNearbyIds]  = useState<string[]>([]);
+
+  // Avatar sprite cache
+  const avatarImgsRef  = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [avatarVer,    setAvatarVer] = useState(0);
+  const currentZoneRef = useRef<string|null>(null);
 
   // Chat state
   const [globalMsgs,    setGlobalMsgs]    = useState<ChatMsg[]>([]);
@@ -106,6 +341,15 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const globalEndRef = useRef<HTMLDivElement>(null);
   const proxEndRef   = useRef<HTMLDivElement>(null);
   const { toasts, addToast } = useToast();
+
+  // Load DiceBear pixel-art avatar for a userId
+  const loadAvatar = useCallback((uid: string) => {
+    if (!uid || avatarImgsRef.current.has(uid)) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = `https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(uid)}&radius=10&scale=88&backgroundColor=transparent`;
+    img.onload = () => { avatarImgsRef.current.set(uid, img); setAvatarVer(v => v+1); };
+  }, []);
 
   // Focus game area once on mount only — NOT on every render
   useEffect(() => { gameAreaRef.current?.focus(); }, []);
@@ -130,8 +374,9 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
           case 'space-joined': {
             setMyPos({ x:msg.payload.spawn.x, y:msg.payload.spawn.y });
             setMyUsername(msg.payload.username || 'You');
+            if(msg.payload.userId){ setMyUserId(msg.payload.userId); loadAvatar(msg.payload.userId); }
             const m = new Map<string,UserState>();
-            (msg.payload.users??[]).forEach((u:any) => { if(u.userId) m.set(u.userId,u); });
+            (msg.payload.users??[]).forEach((u:any) => { if(u.userId){ m.set(u.userId,u); loadAvatar(u.userId); } });
             setOthers(m);
             addToast(`Welcome, ${msg.payload.username}! Use WASD to move.`,'success');
             break;
@@ -140,6 +385,7 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
             const u = msg.payload;
             if(u.userId) {
               setOthers(prev => new Map(prev).set(u.userId, u));
+              loadAvatar(u.userId);
               addToast(`${u.username||'Someone'} joined!`,'info');
             }
             break;
@@ -185,14 +431,25 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
     setNearbyIds(n);
   }, [myPos, others]);
 
+  // ── Zone detection ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if(!myPos) return;
+    const zone = getZoneAt(myPos);
+    const name = zone?.name ?? null;
+    if(name !== currentZoneRef.current){
+      currentZoneRef.current = name;
+      if(name) addToast(`Entered ${name}`,'info');
+    }
+  }, [myPos]);
+
   // ── Canvas ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if(!canvas) return;
     const ctx = canvas.getContext('2d');
     if(!ctx) return;
-    drawScene(ctx, canvas.width, canvas.height, myPos, others, myUsername);
-  }, [myPos, others, myUsername]);
+    drawScene(ctx, canvas.width, canvas.height, myPos, others, myUsername, myUserId, avatarImgsRef.current);
+  }, [myPos, others, myUsername, myUserId, avatarVer]);
 
   // ── Keyboard ───────────────────────────────────────────────────────────────
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
