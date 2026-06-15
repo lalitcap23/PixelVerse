@@ -8,6 +8,18 @@ import { Logo, ToastContainer, useToast } from './components';
 interface ArenaProps { token: string; spaceId: string; onLeave: () => void; }
 interface UserState  { userId: string; username: string; x: number; y: number; }
 interface ChatMsg    { id: string; userId: string; username: string; message: string; timestamp: number; type: 'global' | 'proximity'; }
+type TttSymbol = 'X' | 'O';
+type TttCell = TttSymbol | null;
+type TttSeat = { userId: string; username: string } | null;
+interface TttPlayers { X: TttSeat; O: TttSeat; }
+
+const createEmptyTttBoard = (): TttCell[] => Array(9).fill(null);
+const createEmptyTttPlayers = (): TttPlayers => ({ X: null, O: null });
+const getTttSymbolForUser = (players: TttPlayers, userId: string): TttSymbol | null => {
+  if (players.X?.userId === userId) return 'X';
+  if (players.O?.userId === userId) return 'O';
+  return null;
+};
 
 const TILE = 48, PROX = 3;
 const WORLD_WIDTH = 1600;
@@ -837,6 +849,7 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const [others,     setOthers]     = useState<Map<string,UserState>>(new Map());
   const [connected,  setConnected]  = useState(false);
   const [nearbyIds,  setNearbyIds]  = useState<string[]>([]);
+  const myUserIdRef = useRef('');
 
   // Avatar sprite cache
   const avatarImgsRef  = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -855,10 +868,10 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
   const inGameZone  = myPos ? (myPos.x>=10 && myPos.x<18 && myPos.y>=1 && myPos.y<10) : false;
   const [activeGame, setActiveGame] = useState<'slot'|'rps'|'ttt'|null>(null);
   // Tic-Tac-Toe shared state
-  const [tttBoard, setTttBoard] = useState<(string|null)[]>(Array(9).fill(null));
-  const [tttTurn,  setTttTurn]  = useState<'X'|'O'>('X');
-  const [tttSymbol,setTttSymbol]= useState<'X'|'O'|null>(null);
-  const [tttPlayers,setTttPlayers]=useState<string[]>([]);
+  const [tttBoard, setTttBoard] = useState<TttCell[]>(createEmptyTttBoard());
+  const [tttTurn,  setTttTurn]  = useState<TttSymbol>('X');
+  const [tttSymbol,setTttSymbol]= useState<TttSymbol|null>(null);
+  const [tttPlayers,setTttPlayers]=useState<TttPlayers>(createEmptyTttPlayers());
   // Auto-stop music when player leaves Music Zone
   React.useEffect(() => { if (!inMusicZone) setMusicOn(false); }, [inMusicZone]);
 
@@ -899,7 +912,7 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
           case 'space-joined': {
             setMyPos({ x:msg.payload.spawn.x, y:msg.payload.spawn.y });
             setMyUsername(msg.payload.username || 'You');
-            if(msg.payload.userId){ setMyUserId(msg.payload.userId); loadAvatar(msg.payload.userId); }
+            if(msg.payload.userId){ setMyUserId(msg.payload.userId); myUserIdRef.current = msg.payload.userId; loadAvatar(msg.payload.userId); }
             const m = new Map<string,UserState>();
             (msg.payload.users??[]).forEach((u:any) => { if(u.userId){ m.set(u.userId,u); loadAvatar(u.userId); } });
             setOthers(m);
@@ -937,17 +950,20 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
           }
           case 'music_change':
             setMusicIdx(msg.payload.idx ?? 0); break;
-          case 'ttt_join':
-            setTttPlayers(prev=>{const n=[...new Set([...prev,msg.payload.userId])];return n;});
-            // Assign symbol: first joiner=X, second=O
-            setTttSymbol(prev=>prev); // symbol assigned on join send
+          case 'ttt_state': {
+            const players: TttPlayers = {
+              X: msg.payload.players?.X ?? null,
+              O: msg.payload.players?.O ?? null,
+            };
+            setTttBoard(Array.isArray(msg.payload.board) ? msg.payload.board : createEmptyTttBoard());
+            setTttTurn(msg.payload.turn === 'O' ? 'O' : 'X');
+            setTttPlayers(players);
+            setTttSymbol(getTttSymbolForUser(players, myUserIdRef.current));
             break;
-          case 'ttt_move':
-            setTttBoard(prev=>{const b=[...prev];b[msg.payload.cell]=msg.payload.sym;return b;});
-            setTttTurn(prev=>prev==='X'?'O':'X');
+          }
+          case 'ttt_error':
+            addToast(msg.payload.message || 'Tic-Tac-Toe error', 'error');
             break;
-          case 'ttt_reset':
-            setTttBoard(Array(9).fill(null));setTttTurn('X');break;
           case 'proximity-chat': {
             const m: ChatMsg = { id:Math.random().toString(36), ...msg.payload, type:'proximity' };
             setProximityMsgs(prev=>[...prev,m].slice(-100));
@@ -1013,22 +1029,20 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
     setMusicIdx(idx);
     wsRef.current?.send(JSON.stringify({ type:'music_change', payload:{ idx } }));
   };
-  const sendTttMove=(cell:number)=>{
-    if(!tttSymbol||tttTurn!==tttSymbol)return;
-    const b=[...tttBoard];b[cell]=tttSymbol;
-    setTttBoard(b);setTttTurn(t=>t==='X'?'O':'X');
-    wsRef.current?.send(JSON.stringify({type:'ttt_move',payload:{cell,sym:tttSymbol}}));
+  const sendTttMove = (cell:number) => {
+    if(!tttSymbol || tttTurn !== tttSymbol || tttBoard[cell]) return;
+    wsRef.current?.send(JSON.stringify({ type:'ttt_move', payload:{ cell } }));
   };
-  const sendTttReset=()=>{
-    setTttBoard(Array(9).fill(null));setTttTurn('X');
-    wsRef.current?.send(JSON.stringify({type:'ttt_reset'}));
+  const sendTttReset = () => {
+    wsRef.current?.send(JSON.stringify({ type:'ttt_reset' }));
   };
-  const joinTtt=()=>{
-    // Assign X to first, O to second
-    const sym=tttPlayers.length===0?'X':'O';
-    setTttSymbol(sym);
-    setTttPlayers(prev=>[...new Set([...prev,myUserId])]);
-    wsRef.current?.send(JSON.stringify({type:'ttt_join',payload:{userId:myUserId,sym}}));
+  const joinTtt = () => {
+    setActiveGame('ttt');
+    wsRef.current?.send(JSON.stringify({ type:'ttt_join' }));
+  };
+  const closeTtt = () => {
+    wsRef.current?.send(JSON.stringify({ type:'ttt_leave' }));
+    setActiveGame(null);
   };
   const sendGlobal = () => {
     if(!globalInput.trim()||!wsRef.current) return;
@@ -1363,7 +1377,7 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
             {id:'rps', icon:'🎲',name:'Rock Paper Scissors',desc:'vs Computer',col:'#60a5fa'},
             {id:'ttt', icon:'🎯',name:'Tic-Tac-Toe',desc:'2 Player (WS)',col:'#a78bfa'},
           ] as const).map(g=>(
-            <button key={g.id} onClick={()=>{setActiveGame(g.id);if(g.id==='ttt')joinTtt();}}
+            <button key={g.id} onClick={()=>{ if(g.id==='ttt') { joinTtt(); return; } setActiveGame(g.id); }}
               style={{
                 display:'flex',alignItems:'center',gap:10,width:'100%',
                 background:'rgba(255,255,255,0.04)',border:`1px solid ${g.col}33`,
@@ -1382,10 +1396,14 @@ export default function Arena({ token, spaceId, onLeave }: ArenaProps) {
       {activeGame==='rps'  && <RPS onClose={()=>setActiveGame(null)} />}
       {activeGame==='ttt'  && (
         <TicTacToe
-          onClose={()=>setActiveGame(null)}
-          board={tttBoard} turn={tttTurn} symbol={tttSymbol}
-          onMove={sendTttMove} onReset={sendTttReset}
-          otherOnline={tttPlayers.length>=2}
+          onClose={closeTtt}
+          board={tttBoard}
+          turn={tttTurn}
+          symbol={tttSymbol}
+          players={tttPlayers}
+          onMove={sendTttMove}
+          onReset={sendTttReset}
+          otherOnline={Boolean(tttPlayers.X && tttPlayers.O)}
         />
       )}
 

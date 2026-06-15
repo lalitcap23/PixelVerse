@@ -127,6 +127,39 @@ export class User {
                     break;
                 }
 
+                // ── TIC-TAC-TOE ──────────────────────────────────────────────
+                case "ttt_join": {
+                    if (!this.spaceId) {
+                        return;
+                    }
+                    RoomManager.getInstance().joinTtt(this.spaceId, this);
+                    break;
+                }
+
+                case "ttt_leave": {
+                    if (!this.spaceId || !this.userId) {
+                        return;
+                    }
+                    RoomManager.getInstance().leaveTtt(this.spaceId, this.userId);
+                    break;
+                }
+
+                case "ttt_move": {
+                    if (!this.spaceId || !this.userId) {
+                        return;
+                    }
+                    RoomManager.getInstance().moveTtt(this.spaceId, this.userId, parsedData.payload.cell, this);
+                    break;
+                }
+
+                case "ttt_reset": {
+                    if (!this.spaceId || !this.userId) {
+                        return;
+                    }
+                    RoomManager.getInstance().resetTtt(this.spaceId, this.userId, this);
+                    break;
+                }
+
                 // ── GLOBAL CHAT ───────────────────────────────────────────────
                 case "chat": {
                     const message = (parsedData.payload.message as string)?.trim();
